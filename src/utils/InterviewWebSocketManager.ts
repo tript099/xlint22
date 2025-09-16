@@ -125,9 +125,11 @@ export class InterviewWebSocketManager {
       
       // Check if we haven't received a pong in 30 seconds
       if (Date.now() - this.lastPong > 30000) {
-        console.warn('💔 Heartbeat timeout - no pong received in 30s, closing connection');
-        this.ws.close(4000, "Heartbeat timeout");
-        return;
+        // Log a warning but do NOT forcibly close the socket here. Some networks
+        // temporarily block pongs; allow the existing onclose/reconnect logic to
+        // handle actual disconnect events. This avoids immediate finalization.
+        console.warn('💔 Heartbeat timeout - no pong received in 30s; will continue pings and rely on onclose for reconnection handling');
+        // Do not close the socket here to give the connection a chance to recover.
       }
       
       // Send ping every 10 seconds

@@ -583,7 +583,14 @@ export default function AIInterviewDashboard() {
                               </Button>
                             )}
                             {session.status === 'completed' && (
-                              <Button size="sm" variant="outline">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  // Open the CandidateAiInterviewModal for completed sessions so users can view results
+                                  setSelectedSessionForInterview(session);
+                                }}
+                              >
                                 <Eye className="h-3 w-3 mr-1" />
                                 View Results
                               </Button>
@@ -757,6 +764,8 @@ export default function AIInterviewDashboard() {
               jobTitle={selectedSessionForInterview.job_description?.title || 'Position Assessment'}
               companyName="XLSMART"
               onInterviewComplete={handleInterviewComplete}
+              // If this modal was opened from a completed session, open results immediately
+              initialShowResults={selectedSessionForInterview.status === 'completed'}
             />
           )}
         </DialogContent>

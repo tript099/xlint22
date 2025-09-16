@@ -109,7 +109,7 @@ export class AIInterviewService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          interview_id: interviewSessionId
+          interview_session_id: interviewSessionId
         })
       });
 

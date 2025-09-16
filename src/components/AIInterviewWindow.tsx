@@ -19,6 +19,8 @@ import {
   User,
   Bot
 } from 'lucide-react';
+import { finalizeInterview } from '@/services/interviewApi';
+import { supabase } from "@/integrations/supabase/client";
 
 interface InterviewMessage {
   id: string;
@@ -55,6 +57,10 @@ export default function AIInterviewWindow({
   const [isTestingAudio, setIsTestingAudio] = useState(false);
   const [audioTestStatus, setAudioTestStatus] = useState<'idle' | 'recording' | 'processing' | 'success' | 'error'>('idle');
   const [audioLevel, setAudioLevel] = useState(0);
+  const [interviewCompleted, setInterviewCompleted] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const [interviewResults, setInterviewResults] = useState<any>(null);
+  const [finalizingInterview, setFinalizingInterview] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -67,8 +73,8 @@ export default function AIInterviewWindow({
   // Initialize WebSocket connection
   useEffect(() => {
     const initializeWebSocket = () => {
-      // Use the real WebSocket URL from your AI interviewer backend
-      const wsUrl = `ws://localhost:8008/ws/interview/${sessionId}`;
+      // Use the correct WebSocket URL for your AI interviewer backend
+      const wsUrl = `ws://localhost:8000/ws/interview/${sessionId}`;
       console.log('Connecting to AI interviewer WebSocket:', wsUrl);
       
       wsRef.current = new WebSocket(wsUrl);
@@ -153,6 +159,8 @@ export default function AIInterviewWindow({
         console.log('WebSocket disconnected from AI interviewer');
         setConnectionStatus('disconnected');
         setIsConnected(false);
+        // Call finalize API immediately after WebSocket disconnect
+        endInterview();
       };
 
       wsRef.current.onerror = (error) => {
@@ -172,6 +180,11 @@ export default function AIInterviewWindow({
       }
     };
   }, [sessionId, employeeName, jobTitle]);
+
+  // Debug modal state
+  useEffect(() => {
+    console.log('Modal state changed - showResults:', showResults, 'interviewResults exists:', !!interviewResults);
+  }, [showResults, interviewResults]);
 
   // Initialize camera
   useEffect(() => {
@@ -378,21 +391,91 @@ export default function AIInterviewWindow({
     };
   }, [connectionStatus]);
 
-  const endInterview = () => {
-    if (wsRef.current) {
-      wsRef.current.send(JSON.stringify({
-        type: 'end_interview'
-      }));
-      wsRef.current.close();
+  const endInterview = async () => {
+    try {
+      setFinalizingInterview(true);
+      
+      // Send end interview message to WebSocket
+      if (wsRef.current) {
+        wsRef.current.send(JSON.stringify({
+          type: 'end_interview'
+        }));
+        wsRef.current.close();
+      }
+      
+      // Stop camera stream
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+      
+      // Call finalize API immediately after disconnect
+      console.log('Finalizing interview with session ID:', sessionId);
+      const finalizeResponse = await finalizeInterview({
+        interviewId: sessionId,
+        transcript: messages.map(msg => ({
+          speaker: msg.speaker,
+          content: msg.message,
+          type: msg.type || 'text',
+          timestamp: msg.timestamp.getTime() / 1000
+        }))
+      });
+      
+      console.log('Interview finalized successfully:', finalizeResponse);
+      setInterviewCompleted(true);
+      setInterviewResults(finalizeResponse);
+      
+    } catch (error) {
+      console.error('Error finalizing interview:', error);
+      setInterviewCompleted(true); // Still mark as completed even if finalize fails
+    } finally {
+      setFinalizingInterview(false);
+      onEndInterview();
     }
-    
-    // Stop camera stream
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
+  };
+
+  const handleShowResults = async () => {
+    try {
+      console.log('Fetching interview results from database for session ID:', sessionId);
+      
+      const { data: session, error } = await supabase
+        .from('interview_sessions')
+        .select('ai_analysis, overall_score, strengths, areas_for_improvement, recommendations')
+        .eq('id', sessionId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching interview results:', error);
+        throw error;
+      }
+
+      console.log('Interview results fetched:', session);
+      setInterviewResults(session.ai_analysis || {
+        summary: 'No analysis available',
+        strengths: session.strengths || [],
+        weaknesses: session.areas_for_improvement || [],
+        score: session.overall_score || 0,
+        job_fit: 'Not assessed'
+      });
+      console.log('Setting showResults to true');
+      setShowResults(true);
+    } catch (error) {
+      console.error('Error fetching interview results:', error);
+      // Fallback to showing basic results
+      setInterviewResults({
+        summary: 'Unable to load analysis data',
+        strengths: [],
+        weaknesses: [],
+        score: 0,
+        job_fit: 'Not assessed'
+      });
+      console.log('Setting showResults to true in catch block');
+      setShowResults(true);
     }
-    
-    onEndInterview();
+  };
+
+  const handleCloseResults = () => {
+    setShowResults(false);
   };
 
   const formatTime = (date: Date) => {
@@ -612,18 +695,243 @@ export default function AIInterviewWindow({
                 )}
               </div>
               
-              <Button 
-                variant="destructive" 
-                onClick={endInterview}
-                className="flex items-center space-x-2"
-              >
-                <PhoneOff className="h-4 w-4" />
-                <span>End Interview</span>
-              </Button>
+              <div className="flex items-center space-x-2">
+                {interviewCompleted ? (
+                  <Button 
+                    variant="default" 
+                    onClick={handleShowResults}
+                    className="flex items-center space-x-2"
+                  >
+                    <Bot className="h-4 w-4" />
+                    <span>View Results</span>
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="destructive" 
+                    onClick={endInterview}
+                    disabled={finalizingInterview}
+                    className="flex items-center space-x-2"
+                  >
+                    <PhoneOff className="h-4 w-4" />
+                    <span>{finalizingInterview ? 'Finalizing...' : 'End Interview'}</span>
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Results Modal */}
+      {showResults && interviewResults && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">Interview Results</h2>
+                <Button variant="outline" onClick={handleCloseResults}>
+                  Close
+                </Button>
+              </div>
+              
+              <div className="space-y-6">
+                {interviewResults.summary && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>AI Analysis Summary</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-700">{interviewResults.summary}</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {interviewResults.strengths && interviewResults.strengths.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Strengths</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="list-disc list-inside space-y-1">
+                        {interviewResults.strengths.map((strength: string, index: number) => (
+                          <li key={index} className="text-gray-700">{strength}</li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {interviewResults.weaknesses && interviewResults.weaknesses.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Areas for Improvement</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ul className="list-disc list-inside space-y-1">
+                        {interviewResults.weaknesses.map((weakness: string, index: number) => (
+                          <li key={index} className="text-gray-700">{weakness}</li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {interviewResults.score !== undefined && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Overall Score</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-center">
+                        <div className="text-4xl font-bold text-blue-600 mb-2">
+                          {interviewResults.score}/100
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-4">
+                          <div 
+                            className="bg-blue-600 h-4 rounded-full" 
+                            style={{ width: `${interviewResults.score}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {interviewResults.job_fit && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Job Fit Assessment</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-700">{interviewResults.job_fit}</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {interviewResults.target_role && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Target Role</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-700">{interviewResults.target_role}</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {interviewResults.employee_name && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Employee Name</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-700">{interviewResults.employee_name}</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {interviewResults.current_position && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Current Position</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-700">{interviewResults.current_position}</p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {interviewResults.job_requirements && interviewResults.job_requirements.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Job Requirements</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ol className="list-decimal list-inside space-y-1">
+                        {interviewResults.job_requirements.map((req: string, index: number) => (
+                          <li key={index} className="text-gray-700">{req}</li>
+                        ))}
+                      </ol>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {interviewResults.skills_assessment && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Skills Assessment</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {interviewResults.skills_assessment.agenda_modules && (
+                          <div>
+                            <h4 className="font-semibold mb-2">Agenda Modules</h4>
+                            <div className="space-y-1">
+                              {Object.entries(interviewResults.skills_assessment.agenda_modules).map(([module, status]: [string, any]) => (
+                                <div key={module} className="flex justify-between">
+                                  <span className="text-gray-700">{module}:</span>
+                                  <span className="text-gray-600">{status}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {interviewResults.skills_assessment.required_skills && (
+                          <div>
+                            <h4 className="font-semibold mb-2">Required Skills</h4>
+                            <p className="text-gray-700">{interviewResults.skills_assessment.required_skills}</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {interviewResults.detailed_evaluation && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Detailed Evaluation</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {interviewResults.detailed_evaluation.module_performance && (
+                          <div>
+                            <h4 className="font-semibold mb-2">Module Performance</h4>
+                            <div className="space-y-1">
+                              {Object.entries(interviewResults.detailed_evaluation.module_performance).map(([module, performance]: [string, any]) => (
+                                <div key={module} className="flex justify-between">
+                                  <span className="text-gray-700">{module}:</span>
+                                  <span className="text-gray-600">{performance}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {interviewResults.detailed_evaluation.assessment_fairness && (
+                          <div>
+                            <h4 className="font-semibold mb-2">Assessment Fairness</h4>
+                            <p className="text-gray-700">{interviewResults.detailed_evaluation.assessment_fairness}</p>
+                          </div>
+                        )}
+                        {interviewResults.detailed_evaluation.fairness_adjustments && interviewResults.detailed_evaluation.fairness_adjustments.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold mb-2">Fairness Adjustments</h4>
+                            <ul className="list-disc list-inside space-y-1">
+                              {interviewResults.detailed_evaluation.fairness_adjustments.map((adjustment: string, index: number) => (
+                                <li key={index} className="text-gray-700">{adjustment}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

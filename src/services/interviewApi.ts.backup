@@ -1,0 +1,142 @@
+// src/services/interviewApi.ts
+// API integration for AI Interview system
+
+import axios from 'axios';
+
+// Configuration for AI Interviewer backend
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Request interceptor for error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('API Error:', error);
+    return Promise.reject(error);
+  }
+);
+
+export interface StartInterviewResponse {
+  session_id: string;
+  message?: string;
+}
+
+export interface FinalizeInterviewRequest {
+  interviewId: string;
+  transcript: any[];
+}
+
+export interface FinalizeInterviewResponse {
+  success: boolean;
+  message?: string;
+  analysis?: any;
+}
+
+export interface GetInterviewReportResponse {
+  success: boolean;
+  report?: any;
+  message?: string;
+}
+
+export class InterviewApiError extends Error {
+  constructor(message: string, public statusCode?: number, public details?: any) {
+    super(message);
+    this.name = 'InterviewApiError';
+  }
+}
+
+/**
+ * Start an interview session
+ * POST /start-interview
+ */
+export async function startInterview(interviewSessionId: string): Promise<StartInterviewResponse> {
+  try {
+    const response = await api.post('/start-interview', {
+      interview_session_id: interviewSessionId  // Match server expectation
+    });
+
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      throw new InterviewApiError(
+        error.response.data.detail || error.response.data.message || 'Failed to start interview session',
+        error.response.status,
+        error.response.data
+      );
+    }
+
+    throw new InterviewApiError(
+      `Network error starting interview: ${error.message}`,
+      undefined,
+      error
+    );
+  }
+}
+
+/**
+ * Start a database interview session (legacy method for compatibility)
+ * POST /start-database-interview
+ */
+export async function startDatabaseInterview(interviewId: string): Promise<StartInterviewResponse> {
+  // For now, just call the regular startInterview method
+  return startInterview(interviewId);
+}
+
+/**
+ * Finalize interview with AI analysis
+ * POST /finalize-interview
+ */
+export async function finalizeInterview(request: FinalizeInterviewRequest): Promise<FinalizeInterviewResponse> {
+  try {
+    const response = await api.post('/finalize-interview', request);
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      throw new InterviewApiError(
+        error.response.data.detail || error.response.data.message || 'Failed to finalize interview',
+        error.response.status,
+        error.response.data
+      );
+    }
+
+    throw new InterviewApiError(
+      `Network error finalizing interview: ${error.message}`,
+      undefined,
+      error
+    );
+  }
+}
+
+/**
+ * Get interview report
+ * POST /get-interview-report
+ */
+export async function getInterviewReport(interviewId: string): Promise<GetInterviewReportResponse> {
+  try {
+    const response = await api.post('/get-interview-report', {
+      interviewId: interviewId
+    });
+    return response.data;
+  } catch (error: any) {
+    if (error.response) {
+      throw new InterviewApiError(
+        error.response.data.detail || error.response.data.message || 'Failed to get interview report',
+        error.response.status,
+        error.response.data
+      );
+    }
+
+    throw new InterviewApiError(
+      `Network error getting interview report: ${error.message}`,
+      undefined,
+      error
+    );
+  }
+}
