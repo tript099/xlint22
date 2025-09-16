@@ -1,0 +1,70 @@
+project_id = "lmzzskcneufwglycfdov"
+
+[functions.ai-chat]
+verify_jwt = false
+
+[functions.standardize-roles]
+verify_jwt = false
+
+[functions.ai-job-description-generator]
+verify_jwt = false
+
+[functions.ai-skills-assessment]
+verify_jwt = false
+
+[functions.employee-mobility-planning]
+verify_jwt = false
+
+[functions.development-pathways]
+verify_jwt = false
+
+[functions.dynamic-role-upload]
+verify_jwt = false
+
+[functions.flexible-role-upload]
+verify_jwt = false
+
+[functions.flexible-role-upload-simple]
+verify_jwt = false
+
+[functions.employee-upload-ai]
+verify_jwt = false
+
+[functions.employee-upload-progress]
+verify_jwt = false
+
+[functions.ai-skills-assessment-bulk]
+verify_jwt = false
+
+[functions.ai-skills-assessment-progress]
+verify_jwt = false
+
+[functions.employee-mobility-planning-bulk]
+verify_jwt = false
+
+[functions.employee-mobility-planning-progress]
+verify_jwt = false
+
+[functions.development-pathways-bulk]
+verify_jwt = false
+
+[functions.development-pathways-progress]
+verify_jwt = false
+
+[functions.employee-career-paths]
+verify_jwt = false
+
+[functions.employee-career-paths-bulk]
+verify_jwt = false
+
+[functions.employee-career-paths-progress]
+verify_jwt = false
+
+[functions.role-upload-direct]
+verify_jwt = false
+
+[functions.ai-job-descriptions-intelligence]
+verify_jwt = false
+
+[functions.test-litellm-direct]
+verify_jwt = false

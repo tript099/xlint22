@@ -1,0 +1,2 @@
+-- Fix function search path security issue - already defined in base setup
+-- This migration file is now handled by the base setup migration

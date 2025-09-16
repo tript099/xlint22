@@ -1,0 +1,2 @@
+-- Fix the remaining function search path issue for get_current_user_role
+-- Function is already defined with correct search path in base setup migration
