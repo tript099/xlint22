@@ -9,13 +9,13 @@ import { RoleCategoriesDetails } from "@/components/RoleCategoriesDetails";
 import { StandardizationRateDetails } from "@/components/StandardizationRateDetails";
 import { Briefcase, Upload, Target, BarChart3, Brain, Loader2 } from "lucide-react";
 import { useAIStats } from "@/components/AIStatsProvider";
-import { useRoleAnalytics } from "@/hooks/useRoleAnalytics";
+import { useOptimizedRoleAnalytics } from "@/hooks/useOptimizedRoleAnalytics";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 const RolesDashboard = () => {
   const aiStats = useAIStats();
-  const roleAnalytics = useRoleAnalytics();
+  const roleAnalytics = useOptimizedRoleAnalytics();
   const [activeDialog, setActiveDialog] = useState<string | null>(null);
 
   const roleStats = [

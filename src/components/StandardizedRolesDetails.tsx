@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,11 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Target, Search, Briefcase, Star, Users, Grid3X3, List, Edit, Trash2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { EditRoleDialog } from "@/components/EditRoleDialog";
 import { ConfirmDeleteDialog } from "@/components/ConfirmDeleteDialog";
 import { RoleMappingPagination } from "@/components/RoleMappingPagination";
+import { useStandardizedRoles } from "@/hooks/useStandardizedRoles";
 
 interface StandardizedRole {
   id: string;
@@ -24,94 +24,58 @@ interface StandardizedRole {
 }
 
 export const StandardizedRolesDetails = () => {
-  const [roles, setRoles] = useState<StandardizedRole[]>([]);
-  const [loading, setLoading] = useState(true);
+  // OPTIMIZED: Use React Query hook for caching and optimized data fetching
+  const { roles, isLoading, deleteRole, isDeleting, refreshRoles } = useStandardizedRoles();
+  
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
   const [editRole, setEditRole] = useState<StandardizedRole | null>(null);
-  const [deleteRole, setDeleteRole] = useState<StandardizedRole | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteRoleToDelete, setDeleteRoleToDelete] = useState<StandardizedRole | null>(null);
   const { toast } = useToast();
   const [pageSize, setPageSize] = useState(8);
 
-  useEffect(() => {
-    fetchStandardizedRoles();
-  }, []);
+  // OPTIMIZED: Memoize filtered results to prevent unnecessary recalculations
+  const filteredRoles = useMemo(() => {
+    return roles.filter(role =>
+      role.role_title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      role.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      role.role_level?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [roles, searchTerm]);
 
-  const fetchStandardizedRoles = async () => {
+  // OPTIMIZED: Memoize pagination calculations
+  const paginationData = useMemo(() => {
+    const totalPages = Math.ceil(filteredRoles.length / pageSize);
+    const startIndex = (currentPage - 1) * pageSize;
+    const paginatedRoles = filteredRoles.slice(startIndex, startIndex + pageSize);
+    
+    return { totalPages, paginatedRoles };
+  }, [filteredRoles, currentPage, pageSize]);
+
+  // OPTIMIZED: Memoize delete handler to prevent re-renders
+  const handleDelete = useCallback(async () => {
+    if (!deleteRoleToDelete) return;
+
     try {
-      const { data, error } = await supabase
-        .from('xlsmart_standard_roles')
-        .select('*')
-        .order('role_title');
-
-      if (error) throw error;
+      await deleteRole(deleteRoleToDelete.id);
       
-      // Add employee count for each role
-      const rolesWithCount = await Promise.all(
-        (data || []).map(async (role) => {
-          const { count } = await supabase
-            .from('xlsmart_employees')
-            .select('*', { count: 'exact', head: true })
-            .eq('current_position', role.role_title);
-          
-          return {
-            ...role,
-            employee_count: count || 0
-          };
-        })
-      );
-
-      setRoles(rolesWithCount);
-    } catch (error) {
-      console.error('Error fetching standardized roles:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filteredRoles = roles.filter(role =>
-    role.role_title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    role.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    role.role_level?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const handleDelete = async () => {
-    if (!deleteRole) return;
-
-    setDeleteLoading(true);
-    try {
-      const { error } = await supabase
-        .from('xlsmart_standard_roles')
-        .delete()
-        .eq('id', deleteRole.id);
-
-      if (error) throw error;
-
       toast({
         title: "Success",
         description: "Role deleted successfully",
       });
       
-      fetchStandardizedRoles();
-      setDeleteRole(null);
+      setDeleteRoleToDelete(null);
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message || "Failed to delete role",
         variant: "destructive",
       });
-    } finally {
-      setDeleteLoading(false);
     }
-  };
+  }, [deleteRoleToDelete, deleteRole, toast]);
 
-  const totalPages = Math.ceil(filteredRoles.length / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const paginatedRoles = filteredRoles.slice(startIndex, startIndex + pageSize);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-4 mb-6">
@@ -171,7 +135,7 @@ export const StandardizedRolesDetails = () => {
       {/* Roles Grid or List */}
       {viewMode === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {paginatedRoles.map((role) => (
+          {paginationData.paginatedRoles.map((role) => (
             <Card key={role.id} className="hover:shadow-lg transition-shadow">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -255,7 +219,7 @@ export const StandardizedRolesDetails = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setDeleteRole(role)}
+                      onClick={() => setDeleteRoleToDelete(role)}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -278,7 +242,7 @@ export const StandardizedRolesDetails = () => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedRoles.map((role) => (
+            {paginationData.paginatedRoles.map((role) => (
               <TableRow key={role.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
@@ -334,7 +298,7 @@ export const StandardizedRolesDetails = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setDeleteRole(role)}
+                      onClick={() => setDeleteRoleToDelete(role)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -351,23 +315,23 @@ export const StandardizedRolesDetails = () => {
         open={!!editRole}
         onOpenChange={(open) => !open && setEditRole(null)}
         role={editRole}
-        onSave={fetchStandardizedRoles}
+        onSave={refreshRoles}
       />
 
       {/* Delete Confirmation */}
       <ConfirmDeleteDialog
-        open={!!deleteRole}
-        onOpenChange={(open) => !open && setDeleteRole(null)}
+        open={!!deleteRoleToDelete}
+        onOpenChange={(open) => !open && setDeleteRoleToDelete(null)}
         onConfirm={handleDelete}
         title="Delete Role"
-        description={`Are you sure you want to delete the role "${deleteRole?.role_title}"? This action cannot be undone.`}
-        loading={deleteLoading}
+        description={`Are you sure you want to delete the role "${deleteRoleToDelete?.role_title}"? This action cannot be undone.`}
+        loading={isDeleting}
       />
 
       {/* Pagination */}
       <RoleMappingPagination
         currentPage={currentPage}
-        totalPages={totalPages}
+        totalPages={paginationData.totalPages}
         pageSize={pageSize}
         totalItems={filteredRoles.length}
         onPageChange={setCurrentPage}

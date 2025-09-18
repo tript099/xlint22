@@ -1,3 +1,4 @@
+import React, { memo, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
@@ -11,7 +12,7 @@ interface RoleMappingPaginationProps {
   onPageSizeChange: (size: number) => void;
 }
 
-export const RoleMappingPagination = ({
+const RoleMappingPaginationComponent = ({
   currentPage,
   totalPages,
   pageSize,
@@ -19,10 +20,14 @@ export const RoleMappingPagination = ({
   onPageChange,
   onPageSizeChange
 }: RoleMappingPaginationProps) => {
-  const startItem = (currentPage - 1) * pageSize + 1;
-  const endItem = Math.min(currentPage * pageSize, totalItems);
+  // OPTIMIZED: Memoize calculations
+  const { startItem, endItem } = useMemo(() => ({
+    startItem: (currentPage - 1) * pageSize + 1,
+    endItem: Math.min(currentPage * pageSize, totalItems)
+  }), [currentPage, pageSize, totalItems]);
 
-  const getVisiblePages = () => {
+  // OPTIMIZED: Memoize visible pages calculation
+  const visiblePages = useMemo(() => {
     const delta = 2;
     const range = [];
     const rangeWithDots = [];
@@ -50,7 +55,12 @@ export const RoleMappingPagination = ({
     }
 
     return rangeWithDots;
-  };
+  }, [currentPage, totalPages]);
+
+  // OPTIMIZED: Memoize page size change handler
+  const handlePageSizeChange = useCallback((value: string) => {
+    onPageSizeChange(parseInt(value));
+  }, [onPageSizeChange]);
 
   if (totalPages <= 1) return null;
 
@@ -65,7 +75,7 @@ export const RoleMappingPagination = ({
         {/* Page size selector */}
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Show:</span>
-          <Select value={pageSize.toString()} onValueChange={(value) => onPageSizeChange(Number(value))}>
+          <Select value={pageSize.toString()} onValueChange={handlePageSizeChange}>
             <SelectTrigger className="w-20 h-8">
               <SelectValue />
             </SelectTrigger>
@@ -104,7 +114,7 @@ export const RoleMappingPagination = ({
         </Button>
 
         {/* Page numbers */}
-        {getVisiblePages().map((page, index) => (
+        {visiblePages.map((page, index) => (
           <Button
             key={index}
             variant={page === currentPage ? "default" : "outline"}
@@ -144,3 +154,6 @@ export const RoleMappingPagination = ({
     </div>
   );
 };
+
+// OPTIMIZED: Memoize the component to prevent unnecessary re-renders
+export const RoleMappingPagination = memo(RoleMappingPaginationComponent);
