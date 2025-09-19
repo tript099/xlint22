@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -98,7 +98,8 @@ interface AIJobDescriptionGeneratorEnhancedProps {
   onJDGenerated?: () => void; // Callback to notify parent when JD is generated
 }
 
-export const AIJobDescriptionGeneratorEnhanced: React.FC<AIJobDescriptionGeneratorEnhancedProps> = ({ onJDGenerated }) => {
+// OPTIMIZATION: Memoized component for better performance
+const AIJobDescriptionGeneratorEnhancedComponent: React.FC<AIJobDescriptionGeneratorEnhancedProps> = ({ onJDGenerated }) => {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('bulk');
   
@@ -125,6 +126,15 @@ export const AIJobDescriptionGeneratorEnhanced: React.FC<AIJobDescriptionGenerat
     console.log('🔄 AIJobDescriptionGeneratorEnhanced mounted, loading data...');
     loadStandardRoles();
     loadExistingJDs();
+
+    // Add window focus listener to refresh data when user comes back
+    const handleWindowFocus = () => {
+      console.log('🔄 Window focused, refreshing available roles...');
+      loadStandardRoles();
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => window.removeEventListener('focus', handleWindowFocus);
   }, []);
 
   const loadStandardRoles = async () => {
@@ -146,7 +156,7 @@ export const AIJobDescriptionGeneratorEnhanced: React.FC<AIJobDescriptionGenerat
       // Get all existing job descriptions with their standard_role_id
       const { data: existingJDs, error: jdError } = await supabase
         .from('xlsmart_job_descriptions')
-        .select('standard_role_id')
+        .select('standard_role_id, title, id')
         .not('standard_role_id', 'is', null);
 
       if (jdError) {
@@ -154,13 +164,22 @@ export const AIJobDescriptionGeneratorEnhanced: React.FC<AIJobDescriptionGenerat
         throw jdError;
       }
 
+      console.log('🔍 Debug - All roles fetched:', allRoles?.map(r => ({ id: r.id, position: r.position || r.role_title, role_title: r.role_title })));
+      console.log('🔍 Debug - Existing JDs with standard_role_id:', existingJDs);
+
       // Extract role IDs that already have JDs
       const rolesWithJDs = new Set(
         (existingJDs || []).map(jd => jd.standard_role_id).filter(Boolean)
       );
 
+      console.log('🔍 Debug - Role IDs with existing JDs:', Array.from(rolesWithJDs));
+
       // Filter out roles that already have JDs created
-      const availableRoles = (allRoles || []).filter(role => !rolesWithJDs.has(role.id));
+      const availableRoles = (allRoles || []).filter(role => {
+        const hasJD = rolesWithJDs.has(role.id);
+        console.log(`🔍 Debug - Role ${role.position || role.role_title} (ID: ${role.id}) - Has JD: ${hasJD}`);
+        return !hasJD;
+      });
       
       console.log('Standard roles loaded:', allRoles?.length || 0);
       console.log('Roles with existing JDs:', rolesWithJDs.size);
@@ -358,7 +377,9 @@ Technology Savvy: ${jd.competencies.leadership.technologySavvy}
     }
 
     await loadExistingJDs(); // Refresh the list
+    await loadStandardRoles(); // FIXED: Refresh available roles to remove generated ones
     setBulkGenerating(false);
+    setSelectedRoles([]); // Clear selection since roles are no longer available
 
     // Notify parent component that JDs were generated
     if (onJDGenerated && successCount > 0) {
@@ -596,7 +617,18 @@ Technology Savvy: ${jd.competencies.leadership.technologySavvy}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-lg font-medium">Standard Roles</h3>
-                    <Badge variant="secondary">{standardRoles.length} available</Badge>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={loadStandardRoles}
+                        className="flex items-center gap-1"
+                      >
+                        <Loader2 className="h-3 w-3" />
+                        Refresh
+                      </Button>
+                      <Badge variant="secondary">{standardRoles.length} available</Badge>
+                    </div>
                   </div>
                   
                   <ScrollArea className="h-96 border rounded-md p-4">
@@ -1035,3 +1067,6 @@ Technology Savvy: ${jd.competencies.leadership.technologySavvy}
     </div>
   );
 };
+
+// OPTIMIZATION: Export memoized component
+export const AIJobDescriptionGeneratorEnhanced = memo(AIJobDescriptionGeneratorEnhancedComponent);

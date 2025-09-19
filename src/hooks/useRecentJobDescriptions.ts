@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 interface RecentJobDescription {
@@ -8,39 +8,44 @@ interface RecentJobDescription {
   created_at: string;
 }
 
+// OPTIMIZATION: Fetch function for React Query
+const fetchRecentJobDescriptions = async (): Promise<RecentJobDescription[]> => {
+  console.log('🔄 Fetching recent JDs with React Query...');
+  
+  const { data, error } = await supabase
+    .from('xlsmart_job_descriptions')
+    .select('id, title, status, created_at')
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  if (error) {
+    console.error('Error fetching recent job descriptions:', error);
+    throw error;
+  }
+
+  console.log('✅ Recent JDs fetched successfully:', data?.length || 0);
+  return data || [];
+};
+
 export const useRecentJobDescriptions = () => {
-  const [recentJDs, setRecentJDs] = useState<RecentJobDescription[]>([]);
-  const [loading, setLoading] = useState(true);
+  // OPTIMIZATION: React Query with 2-minute cache
+  const {
+    data: recentJDs = [],
+    isLoading: loading,
+    refetch
+  } = useQuery({
+    queryKey: ['recentJobDescriptions'],
+    queryFn: fetchRecentJobDescriptions,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+    retry: 1
+  });
 
-  const fetchRecentJDs = async () => {
-    console.log('🔄 useRecentJobDescriptions fetchRecentJDs called');
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('xlsmart_job_descriptions')
-        .select('id, title, status, created_at')
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (error) throw error;
-
-      setRecentJDs(data || []);
-    } catch (error) {
-      console.error('Error fetching recent job descriptions:', error);
-    } finally {
-      setLoading(false);
-    }
+  return { 
+    recentJDs, 
+    loading, 
+    refetch: () => refetch() 
   };
-
-  // Create refetch function
-  const refetch = () => {
-    fetchRecentJDs();
-  };
-
-  useEffect(() => {
-    console.log('🔄 useRecentJobDescriptions effect triggered');
-    fetchRecentJDs();
-  }, []);
-
-  return { recentJDs, loading, refetch };
 };

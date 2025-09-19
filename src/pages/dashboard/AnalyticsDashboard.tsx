@@ -19,7 +19,7 @@ import {
 import { AIChat } from "@/components/AIChat";
 import { RoleStandardizationSystem } from "@/components/RoleStandardizationSystem";
 import { LiteLLMTest } from "@/components/LiteLLMTest";
-import { AIJobDescriptionGeneratorEnhanced } from "@/components/AIJobDescriptionGeneratorEnhanced";
+import { AIJobDescriptionGeneratorOptimized } from "@/components/AIJobDescriptionGeneratorOptimized";
 import { AISkillsAssessmentEnhanced } from "@/components/AISkillsAssessmentEnhanced";
 import { EmployeeListDetails } from "@/components/EmployeeListDetails";
 import { StandardizedRolesDetails } from "@/components/StandardizedRolesDetails";
@@ -233,7 +233,7 @@ const AnalyticsDashboard = () => {
                          feature.id === 'mobility' ? 'Employee Mobility Planning' :
                          feature.id === 'development' ? 'Development Pathways' : 'Feature Dialog'}
                       </DialogTitle>
-                      {feature.id === 'jd-generator' && <AIJobDescriptionGeneratorEnhanced />}
+                      {feature.id === 'jd-generator' && <AIJobDescriptionGeneratorOptimized />}
                       {feature.id === 'employee-upload' && <EmployeeUploadTwoStep />}
                       {feature.id === 'assessment' && <AISkillsAssessmentEnhanced />}
                       {feature.id === 'career-paths' && <EmployeeCareerPathsEnhanced />}

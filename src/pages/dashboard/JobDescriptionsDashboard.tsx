@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -9,6 +9,46 @@ import { useJobDescriptionStats } from "@/hooks/useJobDescriptionStats";
 import { useRecentJobDescriptions } from "@/hooks/useRecentJobDescriptions";
 import { useNavigate } from "react-router-dom";
 import { FileText, Zap, CheckCircle, Clock, Brain, Loader2, XCircle } from "lucide-react";
+
+// OPTIMIZATION: Memoized Stats Card Component
+const StatsCard = memo(({ stat, index, onClick }: { 
+  stat: any; 
+  index: number; 
+  onClick: (status: string, index: number) => void;
+}) => (
+  <Card
+    className="hover:shadow-md transition-all duration-200 cursor-pointer hover:scale-105"
+    onClick={() => onClick(stat.status, index)}
+  >
+    <CardContent className="p-4">
+      <div className="flex items-center space-x-3">
+        <div className={`p-2 rounded-lg bg-gradient-to-br ${
+          index % 5 === 0 ? 'from-blue-500 to-blue-600' :
+          index % 5 === 1 ? 'from-green-500 to-green-600' :
+          index % 5 === 2 ? 'from-purple-500 to-purple-600' :
+          index % 5 === 3 ? 'from-orange-500 to-orange-600' :
+          'from-red-500 to-red-600'
+        }`}>
+          <stat.icon className="h-5 w-5 text-white" />
+        </div>
+        <div className="flex-1">
+          <div className={`text-2xl font-bold ${stat.color} flex items-center gap-2`}>
+            {stat.isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+            {stat.value}
+          </div>
+          <p className="text-sm font-medium text-foreground">
+            {stat.label}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {stat.description}
+          </p>
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+));
+
+StatsCard.displayName = 'StatsCard';
 
 const JobDescriptionsDashboard = () => {
   console.log('🔄 JobDescriptionsDashboard rendered');
@@ -52,71 +92,77 @@ const JobDescriptionsDashboard = () => {
   const { recentJDs, loading: recentLoading, refetch: refetchRecent } = useRecentJobDescriptions();
   console.log('📊 Dashboard stats:', { totalJDs, activeJDs, draftJDs, approvedJDs, publishedJDs, declinedJDs, pendingJDs, loading });
 
+  // OPTIMIZATION: Memoized callbacks to prevent re-renders
   const handleCardClick = useCallback((cardType: string, index: number) => {
     console.log('🔍 Card clicked:', cardType, index);
-    
+
     // Open dialog instead of navigation to prevent page reload
-    if (index === 0) {
-      setActiveDialog('all-jds');
-    } else if (index === 1) {
-      setActiveDialog('approved-jds');
-    } else if (index === 2) {
-      setActiveDialog('pending-jds');
-    } else if (index === 3) {
-      setActiveDialog('active-jds');
-    } else if (index === 4) {
-      setActiveDialog('declined-jds');
-    }
+    const dialogMap = ['all-jds', 'approved-jds', 'pending-jds', 'active-jds', 'declined-jds'];
+    setActiveDialog(dialogMap[index] || null);
   }, []);
 
-  // Callback to refresh data when a new JD is generated
+  // OPTIMIZATION: Memoized JD generation callback
   const handleJDGenerated = useCallback(() => {
     console.log('🔄 JD generated, refreshing dashboard data...');
     refetchStats();
     refetchRecent();
   }, [refetchStats, refetchRecent]);
 
-  // Memoize the stats array to prevent re-renders
+  // OPTIMIZATION: Memoized tab change handler
+  const handleTabChange = useCallback((value: string) => {
+    console.log('🔄 Tab changed from', activeTab, 'to', value);
+    setActiveTab(value);
+  }, [activeTab]);
+
+  // OPTIMIZATION: Memoized dialog close handler
+  const handleDialogClose = useCallback((dialogType: string) => {
+    return (open: boolean) => setActiveDialog(open ? dialogType : null);
+  }, []);  // OPTIMIZATION: Memoize the stats array with performance indicators
   const jdStats = useMemo(() => [
-    { 
-      value: loading ? "Loading..." : totalJDs.toLocaleString(), 
-      label: "Generated JDs", 
-      icon: FileText, 
+    {
+      value: loading ? "Loading..." : totalJDs.toLocaleString(),
+      label: "Generated JDs",
+      icon: FileText,
       color: "text-blue-600",
       description: "Total job descriptions",
-      status: "all"
+      status: "all",
+      isLoading: loading
     },
-    { 
-      value: loading ? "Loading..." : `${approvedJDs}`, 
-      label: "Approved JDs", 
-      icon: CheckCircle, 
+    {
+      value: loading ? "Loading..." : `${approvedJDs}`,
+      label: "Approved JDs",
+      icon: CheckCircle,
       color: "text-green-600",
       description: "Approved + Published JDs",
-      status: "approved"
+      status: "approved",
+      isLoading: loading
     },
-    { 
-      value: loading ? "Loading..." : `${pendingJDs}`, 
-      label: "Pending Review", 
-      icon: Clock, 
+    {
+      value: loading ? "Loading..." : `${pendingJDs}`,
+      label: "Pending Review",
+      icon: Clock,
       color: "text-purple-600",
       description: "Need approval or review",
-      status: "draft,review"
+      status: "draft,review",
+      isLoading: loading
     },
-    { 
-      value: loading ? "Loading..." : `${activeJDs}`, 
-      label: "Active JDs", 
-      icon: Zap, 
+    {
+      value: loading ? "Loading..." : `${activeJDs}`,
+      label: "Active JDs",
+      icon: Zap,
       color: "text-orange-600",
       description: "Currently published",
-      status: "published"
+      status: "published",
+      isLoading: loading
     },
-    { 
-      value: loading ? "Loading..." : `${declinedJDs}`, 
-      label: "Declined JDs", 
-      icon: XCircle, 
+    {
+      value: loading ? "Loading..." : `${declinedJDs}`,
+      label: "Declined JDs",
+      icon: XCircle,
       color: "text-red-600",
       description: "Declined job descriptions",
-      status: "declined"
+      status: "declined",
+      isLoading: loading
     }
   ], [loading, totalJDs, approvedJDs, pendingJDs, activeJDs, declinedJDs]);
 
@@ -141,37 +187,12 @@ const JobDescriptionsDashboard = () => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {jdStats.map((stat, index) => (
-            <Card 
-              key={`${stat.label}-${stat.value}`}
-              className="hover:shadow-md transition-all duration-200 cursor-pointer hover:scale-105"
-              onClick={() => handleCardClick(stat.status, index)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-3">
-                  <div className={`p-2 rounded-lg bg-gradient-to-br ${
-                    index % 5 === 0 ? 'from-blue-500 to-blue-600' :
-                    index % 5 === 1 ? 'from-green-500 to-green-600' :
-                    index % 5 === 2 ? 'from-purple-500 to-purple-600' :
-                    index % 5 === 3 ? 'from-orange-500 to-orange-600' :
-                    'from-red-500 to-red-600'
-                  }`}>
-                    <stat.icon className="h-5 w-5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <div className={`text-2xl font-bold ${stat.color} flex items-center gap-2`}>
-                      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-                      {stat.value}
-                    </div>
-                    <p className="text-sm font-medium text-foreground">
-                      {stat.label}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {stat.description}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <StatsCard
+              key={`${stat.label}-${stat.status}`}
+              stat={stat}
+              index={index}
+              onClick={handleCardClick}
+            />
           ))}
         </div>
       </section>
@@ -185,10 +206,7 @@ const JobDescriptionsDashboard = () => {
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(value) => {
-          console.log('🔄 Tab changed from', activeTab, 'to', value);
-          setActiveTab(value);
-        }} className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="generator" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
@@ -303,36 +321,36 @@ const JobDescriptionsDashboard = () => {
         </Card>
       </section>
 
-      {/* Dialog Modals for JD Details */}
-      <Dialog open={activeDialog === 'all-jds'} onOpenChange={(open) => setActiveDialog(open ? 'all-jds' : null)}>
+      {/* OPTIMIZATION: Memoized Dialog Modals for JD Details */}
+      <Dialog open={activeDialog === 'all-jds'} onOpenChange={handleDialogClose('all-jds')}>
         <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogTitle className="sr-only">All Job Descriptions</DialogTitle>
           <JobDescriptionDialog statusFilters={['all']} onActionPerformed={handleJDGenerated} />
         </DialogContent>
       </Dialog>
 
-      <Dialog open={activeDialog === 'approved-jds'} onOpenChange={(open) => setActiveDialog(open ? 'approved-jds' : null)}>
+      <Dialog open={activeDialog === 'approved-jds'} onOpenChange={handleDialogClose('approved-jds')}>
         <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogTitle className="sr-only">Approved Job Descriptions</DialogTitle>
           <JobDescriptionDialog statusFilters={['approved', 'published']} onActionPerformed={handleJDGenerated} />
         </DialogContent>
       </Dialog>
 
-      <Dialog open={activeDialog === 'pending-jds'} onOpenChange={(open) => setActiveDialog(open ? 'pending-jds' : null)}>
+      <Dialog open={activeDialog === 'pending-jds'} onOpenChange={handleDialogClose('pending-jds')}>
         <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogTitle className="sr-only">Pending Review Job Descriptions</DialogTitle>
           <JobDescriptionDialog statusFilters={['draft', 'review']} onActionPerformed={handleJDGenerated} />
         </DialogContent>
       </Dialog>
 
-      <Dialog open={activeDialog === 'active-jds'} onOpenChange={(open) => setActiveDialog(open ? 'active-jds' : null)}>
+      <Dialog open={activeDialog === 'active-jds'} onOpenChange={handleDialogClose('active-jds')}>
         <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogTitle className="sr-only">Active Job Descriptions</DialogTitle>
           <JobDescriptionDialog statusFilters={['published']} onActionPerformed={handleJDGenerated} />
         </DialogContent>
       </Dialog>
 
-      <Dialog open={activeDialog === 'declined-jds'} onOpenChange={(open) => setActiveDialog(open ? 'declined-jds' : null)}>
+      <Dialog open={activeDialog === 'declined-jds'} onOpenChange={handleDialogClose('declined-jds')}>
         <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
           <DialogTitle className="sr-only">Declined Job Descriptions</DialogTitle>
           <JobDescriptionDialog statusFilters={['declined']} onActionPerformed={handleJDGenerated} />
@@ -342,4 +360,4 @@ const JobDescriptionsDashboard = () => {
   );
 };
 
-export default JobDescriptionsDashboard;
+export default memo(JobDescriptionsDashboard);

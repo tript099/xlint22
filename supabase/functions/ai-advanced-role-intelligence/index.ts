@@ -82,7 +82,7 @@ serve(async (req) => {
   }
 });
 
-async function callLiteLLM(prompt: string, systemPrompt: string) {
+async function callLiteLLM(prompt: string, systemPrompt: string, maxTokens: number = 3000) {
   let openAIApiKey = Deno.env.get('OPENAI_API_KEY');
   if (!openAIApiKey) {
     openAIApiKey = Deno.env.get('OPENAI_API_KEY_NEW');
@@ -104,7 +104,7 @@ async function callLiteLLM(prompt: string, systemPrompt: string) {
         { role: 'user', content: prompt }
       ],
       temperature: 0.7,
-      max_completion_tokens: 3000,
+      max_completion_tokens: maxTokens,
     }),
   });
 
@@ -202,7 +202,15 @@ Analyze role evolution trends and predict future role requirements.`;
 }
 
 async function performRedundancyAnalysis(standardRoles: any[], employees: any[]) {
-  const systemPrompt = `You are an AI specialist in advanced role intelligence for XLSMART, one of Indonesia's largest telecom companies. Specialize in redundancy analysis to: Analyze role redundancy and overlap across the organization. Identify consolidation opportunities and efficiency improvements. Recommend organizational restructuring strategies. Ensure optimization aligns with telecom operational excellence and XLSMART's strategic goals. ⚙️ Output Requirements: Always return insights in valid JSON format. Ensure results are structured, comprehensive, and machine-readable, ready for integration into XLSMART's HR systems.
+  const systemPrompt = `You are an AI specialist in advanced role intelligence for XLSMART, one of Indonesia's largest telecom companies. Specialize in redundancy analysis to: Analyze role redundancy and overlap across the organization. Identify consolidation opportunities and efficiency improvements. Recommend organizational restructuring strategies. Ensure optimization aligns with telecom operational excellence and XLSMART's strategic goals. 
+
+⚙️ CRITICAL OUTPUT REQUIREMENTS: 
+- Always return COMPLETE, valid JSON format
+- NEVER add comments like "// ... Truncated for brevity" or "// ... Additional roles can be extended as needed"
+- NEVER use "..." or abbreviations in arrays
+- Include ALL data for ALL roles - do not skip or abbreviate any entries
+- Ensure the JSON is syntactically perfect and parseable
+- Results must be structured, comprehensive, and machine-readable for XLSMART's HR systems
 
 Return a JSON object with this structure:
 {
@@ -269,12 +277,18 @@ Current Employee Roles: ${JSON.stringify((employees || []).map(emp => ({
 
 Identify redundant roles and recommend optimization strategies.`;
 
-  const response = await callLiteLLM(prompt, systemPrompt);
+  const response = await callLiteLLM(prompt, systemPrompt); // Use default 3000 tokens
   try {
+    // Check for truncation indicators
+    if (response.includes('// ...') || response.includes('...') || response.includes('Truncated') || response.includes('abbreviated')) {
+      console.error('AI response appears to be truncated:', response.substring(response.length - 200));
+      throw new Error('AI response was truncated - incomplete JSON');
+    }
     return JSON.parse(response);
   } catch (error) {
     console.error('Error parsing redundancy analysis response:', error);
-    console.error('Raw response:', response);
+    console.error('Raw response length:', response.length);
+    console.error('Raw response (last 500 chars):', response.substring(Math.max(0, response.length - 500)));
     throw new Error('Failed to parse AI response for redundancy analysis');
   }
 }
@@ -359,7 +373,15 @@ Predict future role evolution and organizational needs.`;
 }
 
 async function performCompetitivenessScoring(standardRoles: any[], employees: any[], departmentFilter?: string) {
-  const systemPrompt = `You are an AI specialist in advanced role intelligence for XLSMART, one of Indonesia's largest telecom companies. Specialize in competitiveness scoring to: Analyze role competitiveness in the telecom talent market. Assess market positioning and talent attraction capabilities. Recommend strategies to improve competitive advantage and retention. Ensure analysis aligns with Indonesian telecom market dynamics and XLSMART's talent strategy. ⚙️ Output Requirements: Always return insights in valid JSON format. Ensure results are structured, comprehensive, and machine-readable, ready for integration into XLSMART's HR systems.
+  const systemPrompt = `You are an AI specialist in advanced role intelligence for XLSMART, one of Indonesia's largest telecom companies. Specialize in competitiveness scoring to: Analyze role competitiveness in the telecom talent market. Assess market positioning and talent attraction capabilities. Recommend strategies to improve competitive advantage and retention. Ensure analysis aligns with Indonesian telecom market dynamics and XLSMART's talent strategy. 
+
+⚙️ CRITICAL OUTPUT REQUIREMENTS: 
+- Always return COMPLETE, valid JSON format
+- NEVER add comments like "// ... Truncated for brevity" or "// ... Additional roles can be extended as needed"
+- NEVER use "..." or abbreviations in arrays
+- Include ALL data for ALL roles - do not skip or abbreviate any entries
+- Ensure the JSON is syntactically perfect and parseable
+- Results must be structured, comprehensive, and machine-readable for XLSMART's HR systems
 
 Return a JSON object with this structure:
 {
@@ -429,12 +451,18 @@ ${departmentFilter ? `Focus analysis on department: ${departmentFilter}` : ''}
 
 Assess role competitiveness and recommend talent attraction strategies.`;
 
-  const response = await callLiteLLM(prompt, systemPrompt);
+  const response = await callLiteLLM(prompt, systemPrompt); // Use default 3000 tokens
   try {
+    // Check for truncation indicators
+    if (response.includes('// ...') || response.includes('...') || response.includes('Truncated') || response.includes('abbreviated')) {
+      console.error('AI response appears to be truncated:', response.substring(response.length - 200));
+      throw new Error('AI response was truncated - incomplete JSON');
+    }
     return JSON.parse(response);
   } catch (error) {
     console.error('Error parsing competitiveness scoring response:', error);
-    console.error('Raw response:', response);
+    console.error('Raw response length:', response.length);
+    console.error('Raw response (last 500 chars):', response.substring(Math.max(0, response.length - 500)));
     throw new Error('Failed to parse AI response for competitiveness scoring');
   }
 }
